@@ -179,10 +179,12 @@ void PairCFM::compute(int eflag, int vflag)
       if (update->ntimestep < 1){
           if (rsq <= (radsum*radsum)){
               is_cohesive[ID1][ID2] = true; // is cohesive = 1.0 ; is not cohesive = -1.0
+              is_cohesive[ID2][ID1] = true;
           }
           else{
               touch[jj] = 0;
               is_cohesive[ID1][ID2] = false;
+              is_cohesive[ID2][ID1] = false;
               _ignore = -1;
           }
       }
@@ -225,6 +227,7 @@ void PairCFM::compute(int eflag, int vflag)
               _history[2] = 0.0;
               _history[5] += 1.0;
               is_cohesive[ID1][ID2] = false;
+              is_cohesive[ID2][ID1] = false;
               _ignore = -1;
           }
       }
@@ -343,6 +346,7 @@ void PairCFM::compute(int eflag, int vflag)
           if (is_cohesive[ID1][ID2]){
               _history[6] += + 1.0;
               is_cohesive[ID1][ID2] = false;
+              is_cohesive[ID2][ID1] = false;
               if (rsq > (radsum*radsum)){
                   touch[jj] = 0;
                   _history[0] = 0.0;
