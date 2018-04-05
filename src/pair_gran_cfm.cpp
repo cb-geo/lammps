@@ -46,8 +46,6 @@ PairCFM::PairCFM(LAMMPS *lmp) : Pair(lmp)
   no_virial_fdotr_compute = 1;
   history = 1;
   fix_history = NULL;
-
-  iscohesive = false;
   
   single_extra = 13;
   svector = new double[13];
@@ -98,6 +96,7 @@ void PairCFM::compute(int eflag, int vflag)
   int *ilist,*jlist,*numneigh,**firstneigh;
   int *touch,**firsttouch;
   double *_history,*allshear,**firstshear;
+  bool *iscohesive;
 
   if (eflag || vflag) ev_setup(eflag,vflag);
   else evflag = vflag_fdotr = 0;
@@ -152,6 +151,7 @@ void PairCFM::compute(int eflag, int vflag)
     allshear = firstshear[i];
     jlist = firstneigh[i];
     jnum = numneigh[i];
+    iscohesive = is_cohesive[i];
 
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
@@ -176,16 +176,16 @@ void PairCFM::compute(int eflag, int vflag)
 
       if (update->ntimestep < 1){
           if (rsq <= (radsum*radsum)){
-              iscohesive = true; // is cohesive = 1.0 ; is not cohesive = -1.0
+              iscohesive[j] = true; // is cohesive = 1.0 ; is not cohesive = -1.0
           }
           else{
               touch[jj] = 0;
-              iscohesive = false;
+              iscohesive[j] = false;
               _ignore = -1;
           }
       }
 
-      if (!iscohesive && rsq > radsum*radsum) {
+      if (!iscohesive[j] && rsq > radsum*radsum) {
 
         // unset non-touching neighbors
 
@@ -197,7 +197,7 @@ void PairCFM::compute(int eflag, int vflag)
 
       }
 
-      if (iscohesive)
+      if (iscohesive[j])
       {
           _Dtensile = (M_PI * radmin * _t) / kn; // maximum distance between particles before the bond breaks (always positive)
       }
@@ -207,7 +207,7 @@ void PairCFM::compute(int eflag, int vflag)
 
       if (rsq > (radsum*radsum))   // if particles are not in touch
       {
-          if (!iscohesive)   // if particles are not cohesive
+          if (!iscohesive[j])   // if particles are not cohesive
           {
               touch[jj] = 0;
               _history[0] = 0.0;
@@ -215,23 +215,17 @@ void PairCFM::compute(int eflag, int vflag)
               _history[2] = 0.0;
               _ignore = -1;
           }
-          //if ((fabs(radsum - sqrt(rsq)) >= _Dtensile) && (_history[3] > 0.0))  // if the current displacement is bigger than the allowed
-          if ((fabs(radsum - sqrt(rsq)) >= _Dtensile) && (iscohesive))
+          if ((fabs(radsum - sqrt(rsq)) >= _Dtensile) && (iscohesive[j]))
           {
               touch[jj] = 0;
               _history[0] = 0.0;
               _history[1] = 0.0;
               _history[2] = 0.0;
               _history[5] += 1.0;
-              iscohesive = false;
+              iscohesive[j] = false;
               _ignore = -1;
           }
       }
-
-//      if (update->ntimestep > 1 && rsq > radsum*radsum && (fabs(radsum - sqrt(rsq)) >= _Dtensile))
-//      {
-//          _history[3] = -1.0;
-//      }
 
       if (_ignore != -1){
         r = sqrt(rsq);
@@ -320,7 +314,7 @@ void PairCFM::compute(int eflag, int vflag)
 
         // rescale frictional displacements and forces if needed
 
-        if (iscohesive)
+        if (iscohesive[j])
         {
             _maxShearForce = M_PI * radmin * _c;
             fn = xmu * fabs(ccel*r) + _maxShearForce;
@@ -344,9 +338,9 @@ void PairCFM::compute(int eflag, int vflag)
             fs3 *= fn/fs;
           } else fs1 = fs2 = fs3 = 0.0;
 
-          if (iscohesive){
+          if (iscohesive[j]){
               _history[6] += + 1.0;
-              iscohesive = false;
+              iscohesive[j] = false;
               if (rsq > (radsum*radsum)){
                   touch[jj] = 0;
                   _history[0] = 0.0;
@@ -407,6 +401,12 @@ void PairCFM::allocate()
   for (int i = 1; i <= n; i++)
     for (int j = i; j <= n; j++)
       setflag[i][j] = 0;
+
+  // the size of the vectors are adopted only for testing
+  memory->create(is_cohesive,1000,1000,"pair_gran_CFM:is_cohesive");
+  for (int i = 1; i <= 999; i++)
+    for (int j = i; j <= 999; j++)
+      is_cohesive[i][j] = false;
 
   memory->create(cutsq,n+1,n+1,"pair:cutsq");
 
@@ -686,209 +686,209 @@ double PairCFM::single(int i, int j, int itype, int jtype,
                                     double &fforce)
 {
 
-  double radi,radj,radsum;
-  double r,rinv,rsqinv,delx,dely,delz;
-  double vr1,vr2,vr3,vnnr,vn1,vn2,vn3,vt1,vt2,vt3,wr1,wr2,wr3;
-  double mi,mj,meff,damp,ccel;
-  double vtr1,vtr2,vtr3,vrel,shrmag,rsht;
-  double fs1,fs2,fs3,fs,fn;
+//  double radi,radj,radsum;
+//  double r,rinv,rsqinv,delx,dely,delz;
+//  double vr1,vr2,vr3,vnnr,vn1,vn2,vn3,vt1,vt2,vt3,wr1,wr2,wr3;
+//  double mi,mj,meff,damp,ccel;
+//  double vtr1,vtr2,vtr3,vrel,shrmag,rsht;
+//  double fs1,fs2,fs3,fs,fn;
 
-  int shearupdate = 1;
+//  int shearupdate = 1;
 
-  double *radius = atom->radius;
-  radi = radius[i];
-  radj = radius[j];
-  radsum = radi + radj;
+//  double *radius = atom->radius;
+//  radi = radius[i];
+//  radj = radius[j];
+//  radsum = radi + radj;
 
-  double *allshear = fix_history->firstvalue[i];
-  double *_history = &allshear[3*neighprev];
-  double radmin = fmin(radi,radj);
+//  double *allshear = fix_history->firstvalue[i];
+//  double *_history = &allshear[3*neighprev];
+//  double radmin = fmin(radi,radj);
 
-  if (!iscohesive && rsq > radsum*radsum) {
-    fforce = 0.0;
-    for (int m = 0; m < single_extra; m++) svector[m] = 0.0;
-    return 0.0;
-  }
+//  if (!iscohesive && rsq > radsum*radsum) {
+//    fforce = 0.0;
+//    for (int m = 0; m < single_extra; m++) svector[m] = 0.0;
+//    return 0.0;
+//  }
 
-  if (iscohesive)
-  {
-      _Dtensile = (M_PI * radmin * _t) / kn; // maximum distance between particles before the bond breaks (always positive)
-  }
-  else _Dtensile = 0.0;
+//  if (iscohesive)
+//  {
+//      _Dtensile = (M_PI * radmin * _t) / kn; // maximum distance between particles before the bond breaks (always positive)
+//  }
+//  else _Dtensile = 0.0;
 
-  if(rsq > (radsum*radsum)){
-      if (!iscohesive){
-          fforce = 0.0;
-          for (int m = 0; m < single_extra; m++) svector[m] = 0.0;
-          return 0.0;
-      }
-      if ((fabs(radsum - sqrt(rsq)) > _Dtensile) && (iscohesive)){
-          fforce = 0.0;
-          for (int m = 0; m < single_extra; m++) svector[m] = 0.0;
-          return 0.0;
-      }
-  }
+//  if(rsq > (radsum*radsum)){
+//      if (!iscohesive){
+//          fforce = 0.0;
+//          for (int m = 0; m < single_extra; m++) svector[m] = 0.0;
+//          return 0.0;
+//      }
+//      if ((fabs(radsum - sqrt(rsq)) > _Dtensile) && (iscohesive)){
+//          fforce = 0.0;
+//          for (int m = 0; m < single_extra; m++) svector[m] = 0.0;
+//          return 0.0;
+//      }
+//  }
 
-      r = sqrt(rsq);
-      rinv = 1.0/r;
-      rsqinv = 1.0/rsq;
+//      r = sqrt(rsq);
+//      rinv = 1.0/r;
+//      rsqinv = 1.0/rsq;
 
-      // relative translational velocity
+//      // relative translational velocity
 
-      double **v = atom->v;
-      vr1 = v[i][0] - v[j][0];
-      vr2 = v[i][1] - v[j][1];
-      vr3 = v[i][2] - v[j][2];
+//      double **v = atom->v;
+//      vr1 = v[i][0] - v[j][0];
+//      vr2 = v[i][1] - v[j][1];
+//      vr3 = v[i][2] - v[j][2];
 
-      // normal component
+//      // normal component
 
-      double **x = atom->x;
-      delx = x[i][0] - x[j][0];
-      dely = x[i][1] - x[j][1];
-      delz = x[i][2] - x[j][2];
+//      double **x = atom->x;
+//      delx = x[i][0] - x[j][0];
+//      dely = x[i][1] - x[j][1];
+//      delz = x[i][2] - x[j][2];
 
-      vnnr = vr1*delx + vr2*dely + vr3*delz;
-      vn1 = delx*vnnr * rsqinv;
-      vn2 = dely*vnnr * rsqinv;
-      vn3 = delz*vnnr * rsqinv;
+//      vnnr = vr1*delx + vr2*dely + vr3*delz;
+//      vn1 = delx*vnnr * rsqinv;
+//      vn2 = dely*vnnr * rsqinv;
+//      vn3 = delz*vnnr * rsqinv;
 
-      // tangential component
+//      // tangential component
 
-      vt1 = vr1 - vn1;
-      vt2 = vr2 - vn2;
-      vt3 = vr3 - vn3;
+//      vt1 = vr1 - vn1;
+//      vt2 = vr2 - vn2;
+//      vt3 = vr3 - vn3;
 
-      // relative rotational velocity
+//      // relative rotational velocity
 
-      double **omega = atom->omega;
-      wr1 = (radi*omega[i][0] + radj*omega[j][0]) * rinv;
-      wr2 = (radi*omega[i][1] + radj*omega[j][1]) * rinv;
-      wr3 = (radi*omega[i][2] + radj*omega[j][2]) * rinv;
+//      double **omega = atom->omega;
+//      wr1 = (radi*omega[i][0] + radj*omega[j][0]) * rinv;
+//      wr2 = (radi*omega[i][1] + radj*omega[j][1]) * rinv;
+//      wr3 = (radi*omega[i][2] + radj*omega[j][2]) * rinv;
 
-      // meff = effective mass of pair of particles
-      // if I or J part of rigid body, use body mass
-      // if I or J is frozen, meff is other particle
+//      // meff = effective mass of pair of particles
+//      // if I or J part of rigid body, use body mass
+//      // if I or J is frozen, meff is other particle
 
-      double *rmass = atom->rmass;
-      int *mask = atom->mask;
+//      double *rmass = atom->rmass;
+//      int *mask = atom->mask;
 
-      mi = rmass[i];
-      mj = rmass[j];
-      if (fix_rigid) {
-        // NOTE: insure mass_rigid is current for owned+ghost atoms?
-        if (mass_rigid[i] > 0.0) mi = mass_rigid[i];
-        if (mass_rigid[j] > 0.0) mj = mass_rigid[j];
-      }
+//      mi = rmass[i];
+//      mj = rmass[j];
+//      if (fix_rigid) {
+//        // NOTE: insure mass_rigid is current for owned+ghost atoms?
+//        if (mass_rigid[i] > 0.0) mi = mass_rigid[i];
+//        if (mass_rigid[j] > 0.0) mj = mass_rigid[j];
+//      }
 
-      meff = mi*mj / (mi+mj);
-      if (mask[i] & freeze_group_bit) meff = mj;
-      if (mask[j] & freeze_group_bit) meff = mi;
+//      meff = mi*mj / (mi+mj);
+//      if (mask[i] & freeze_group_bit) meff = mj;
+//      if (mask[j] & freeze_group_bit) meff = mi;
 
-      // normal forces = Hookian contact + normal velocity damping
+//      // normal forces = Hookian contact + normal velocity damping
 
-      damp = meff*gamman*vnnr*rsqinv;
-      ccel = kn*(radsum-r)*rinv - damp;
-      //ccel = kn*(_D)*rinv - damp;
+//      damp = meff*gamman*vnnr*rsqinv;
+//      ccel = kn*(radsum-r)*rinv - damp;
+//      //ccel = kn*(_D)*rinv - damp;
 
-      // relative velocities
+//      // relative velocities
 
-      vtr1 = vt1 - (delz*wr2-dely*wr3);
-      vtr2 = vt2 - (delx*wr3-delz*wr1);
-      vtr3 = vt3 - (dely*wr1-delx*wr2);
-      vrel = vtr1*vtr1 + vtr2*vtr2 + vtr3*vtr3;
-      vrel = sqrt(vrel);
+//      vtr1 = vt1 - (delz*wr2-dely*wr3);
+//      vtr2 = vt2 - (delx*wr3-delz*wr1);
+//      vtr3 = vt3 - (dely*wr1-delx*wr2);
+//      vrel = vtr1*vtr1 + vtr2*vtr2 + vtr3*vtr3;
+//      vrel = sqrt(vrel);
 
-      // shear history effects
-      // neighprev = index of found neigh on previous call
-      // search entire jnum list of neighbors of I for neighbor J
-      // start from neighprev, since will typically be next neighbor
-      // reset neighprev to 0 as necessary
+//      // shear history effects
+//      // neighprev = index of found neigh on previous call
+//      // search entire jnum list of neighbors of I for neighbor J
+//      // start from neighprev, since will typically be next neighbor
+//      // reset neighprev to 0 as necessary
 
-      int jnum = list->numneigh[i];
-      int *jlist = list->firstneigh[i];
+//      int jnum = list->numneigh[i];
+//      int *jlist = list->firstneigh[i];
 
-      for (int jj = 0; jj < jnum; jj++) {
-        neighprev++;
-        if (neighprev >= jnum) neighprev = 0;
-        if (jlist[neighprev] == j) break;
-      }
+//      for (int jj = 0; jj < jnum; jj++) {
+//        neighprev++;
+//        if (neighprev >= jnum) neighprev = 0;
+//        if (jlist[neighprev] == j) break;
+//      }
 
-      //double *shear = &allshear[3*neighprev];
-      shrmag = sqrt(_history[0]*_history[0] + _history[1]*_history[1] +
-                    _history[2]*_history[2]);
+//      //double *shear = &allshear[3*neighprev];
+//      shrmag = sqrt(_history[0]*_history[0] + _history[1]*_history[1] +
+//                    _history[2]*_history[2]);
 
-      // rotate shear displacements
+//      // rotate shear displacements
 
-      rsht = _history[0]*delx + _history[1]*dely + _history[2]*delz;
-      rsht *= rsqinv;
+//      rsht = _history[0]*delx + _history[1]*dely + _history[2]*delz;
+//      rsht *= rsqinv;
 
-      // tangential forces = shear + tangential velocity damping
+//      // tangential forces = shear + tangential velocity damping
 
-      fs1 = - (kt*_history[0] + meff*gammat*vtr1);
-      fs2 = - (kt*_history[1] + meff*gammat*vtr2);
-      fs3 = - (kt*_history[2] + meff*gammat*vtr3);
+//      fs1 = - (kt*_history[0] + meff*gammat*vtr1);
+//      fs2 = - (kt*_history[1] + meff*gammat*vtr2);
+//      fs3 = - (kt*_history[2] + meff*gammat*vtr3);
 
-      // rescale frictional displacements and forces if needed
+//      // rescale frictional displacements and forces if needed
 
-      if (iscohesive){
-          _maxShearForce = M_PI * radmin * _c;
-          fn = xmu * fabs(ccel*r) + _maxShearForce;
-      }
-      else {
-          fn = xmu * fabs(ccel*r);
-      }
+//      if (iscohesive){
+//          _maxShearForce = M_PI * radmin * _c;
+//          fn = xmu * fabs(ccel*r) + _maxShearForce;
+//      }
+//      else {
+//          fn = xmu * fabs(ccel*r);
+//      }
 
-      fs = sqrt(fs1*fs1 + fs2*fs2 + fs3*fs3);
+//      fs = sqrt(fs1*fs1 + fs2*fs2 + fs3*fs3);
 
-      if (fs >= fn) {
-        if (shrmag != 0.0) {
-          fs1 *= fn/fs;
-          fs2 *= fn/fs;
-          fs3 *= fn/fs;
-          fs *= fn/fs;
-        } else fs1 = fs2 = fs3 = fs = 0.0;
-        if (iscohesive){
-            if(rsq > (radsum*radsum)){
-                fforce = 0.0;
-                fs1 = 0.0;
-                fs2 = 0.0;
-                fs3 = 0.0;
-                fs = 0.0;
-                for (int m = 0; m < single_extra; m++) svector[m] = 0.0;
-                return 0.0;
-            }
-        }
-      }
+//      if (fs >= fn) {
+//        if (shrmag != 0.0) {
+//          fs1 *= fn/fs;
+//          fs2 *= fn/fs;
+//          fs3 *= fn/fs;
+//          fs *= fn/fs;
+//        } else fs1 = fs2 = fs3 = fs = 0.0;
+//        if (iscohesive){
+//            if(rsq > (radsum*radsum)){
+//                fforce = 0.0;
+//                fs1 = 0.0;
+//                fs2 = 0.0;
+//                fs3 = 0.0;
+//                fs = 0.0;
+//                for (int m = 0; m < single_extra; m++) svector[m] = 0.0;
+//                return 0.0;
+//            }
+//        }
+//      }
 
-      // set force and return no energy
+//      // set force and return no energy
 
-      fforce = ccel;
+//      fforce = ccel;
 
-//      // set single_extra quantities
+////      // set single_extra quantities
 
-//      svector[0] = _history[4];
-//      svector[1] = _history[3];
-//      svector[2] = fn;
-//      svector[3] = fs;
-//      svector[4] = _D;
-//      svector[5] = _Dtensile;
-//      svector[6] = i;
-//      svector[7] = j;
-//      svector[8] = fs1;
-//      svector[9] = fs2;
-//      svector[10] = fs3;
-//      svector[11] = (ccel*r);
+////      svector[0] = _history[4];
+////      svector[1] = _history[3];
+////      svector[2] = fn;
+////      svector[3] = fs;
+////      svector[4] = _D;
+////      svector[5] = _Dtensile;
+////      svector[6] = i;
+////      svector[7] = j;
+////      svector[8] = fs1;
+////      svector[9] = fs2;
+////      svector[10] = fs3;
+////      svector[11] = (ccel*r);
 
-//      svector[0] = i;
-//      svector[1] = j;
-      svector[0] = (radsum*radsum) - sqrt(rsq);
-      svector[1] = ccel;
-      //svector[2] = dely*ccel;
-      //svector[3] = delz*ccel;
-      svector[2] = iscohesive;
-      //svector[3] = _history[1];
-      //svector[4] = _history[2];
-      //svector[7] = _history[3];
+////      svector[0] = i;
+////      svector[1] = j;
+//      svector[0] = (radsum*radsum) - sqrt(rsq);
+//      svector[1] = ccel;
+//      //svector[2] = dely*ccel;
+//      //svector[3] = delz*ccel;
+//      svector[2] = iscohesive;
+//      //svector[3] = _history[1];
+//      //svector[4] = _history[2];
+//      //svector[7] = _history[3];
 
 
       return 0.0;

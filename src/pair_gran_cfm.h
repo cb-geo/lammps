@@ -50,7 +50,7 @@ class PairCFM : public Pair {
   int freeze_group_bit;
   int history;
   double _Dtensile,_D,_maxShearForce;
-  bool iscohesive;
+  bool **is_cohesive;
 
   int neighprev;
   double *onerad_dynamic,*onerad_frozen;
