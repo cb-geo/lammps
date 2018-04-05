@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pair_gran_CFM.h"
+
 #include "atom.h"
 #include "atom_vec.h"
 #include "domain.h"
@@ -34,6 +34,7 @@
 #include "neigh_request.h"
 #include "memory.h"
 #include "error.h"
+#include "pair_gran_cfm.h"
 
 using namespace LAMMPS_NS;
 
@@ -173,8 +174,8 @@ void PairCFM::compute(int eflag, int vflag)
 
       int _ignore = 1; // if ignore = -1, then, do not evaluate forces
 
-      if (update->ntimestep <= 1){
-          if (rsq <= (radsum*radsum)+1.0){
+      if (update->ntimestep < 1){
+          if (rsq <= (radsum*radsum)){
               iscohesive = true; // is cohesive = 1.0 ; is not cohesive = -1.0
           }
           else{
