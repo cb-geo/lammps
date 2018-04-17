@@ -140,6 +140,7 @@ void PairCFM::compute(int eflag, int vflag)
   firstshear = fix_history->firstvalue;
 
   // loop over neighbors of my atoms
+  int number_pairs = 0;
 
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
@@ -166,7 +167,7 @@ void PairCFM::compute(int eflag, int vflag)
       radj = radius[j];
       radsum = radi + radj;
 
-      _history = &allshear[3*jj];   // history[0] = shear1 / history[1] = shear2 / history[2] = shear3 / history[3] = isCohesive / history[4] = initialD /
+      _history = &allshear[3*jj];   // history[0] = shear1 / history[1] = shear2 / history[2] = shear3 / history[4] = initialD /
                                     // history[5] = tensileBreakage / history[6] = shearBreakage
 
       // for the first timestep, create bonds
@@ -233,6 +234,7 @@ void PairCFM::compute(int eflag, int vflag)
       }
 
       if (_ignore != -1){
+        number_pairs = number_pairs + 1;
         r = sqrt(rsq);
         rinv = 1.0/r;
         rsqinv = 1.0/rsq;
@@ -391,6 +393,8 @@ void PairCFM::compute(int eflag, int vflag)
     }
   }
 
+  n_pairs = number_pairs;
+
   if (vflag_fdotr) virial_fdotr_compute();
 }
 
@@ -408,10 +412,12 @@ void PairCFM::allocate()
     for (int j = i; j <= n; j++)
       setflag[i][j] = 0;
 
+  int m = n_pairs;
+
   // the size of the vectors are adopted only for testing
-  memory->create(is_cohesive,1000,1000,"pair_gran_CFM:is_cohesive");
-  for (int i = 1; i <= 999; i++)
-    for (int j = i; j <= 999; j++)
+  memory->create(is_cohesive,m,m,"pair_gran_CFM:is_cohesive");
+  for (int i = 1; i <= m-1; i++)
+    for (int j = i; j <= m-1; j++)
       is_cohesive[i][j] = false;
 
   memory->create(cutsq,n+1,n+1,"pair:cutsq");
