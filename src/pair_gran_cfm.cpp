@@ -416,8 +416,8 @@ void PairCFM::allocate()
 
   // the size of the vectors are adopted only for testing
   memory->create(is_cohesive,m,m,"pair_gran_CFM:is_cohesive");
-  for (int i = 1; i <= m-1; i++)
-    for (int j = i; j <= m-1; j++)
+  for (int i = 0; i <= m-1; i++)
+    for (int j = 0; j <= m-1; j++)
       is_cohesive[i][j] = false;
 
   memory->create(cutsq,n+1,n+1,"pair:cutsq");
