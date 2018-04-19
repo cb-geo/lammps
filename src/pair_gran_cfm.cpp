@@ -139,25 +139,11 @@ void PairCFM::compute(int eflag, int vflag)
   firsttouch = fix_history->firstflag;
   firstshear = fix_history->firstvalue;
 
-  int sum_jnum = 0;
-
   if (update->ntimestep == 0)
   {
-      for (ii = 0; ii < inum; ii++) {
-        i = ilist[ii];
-        jlist = firstneigh[i];
-        jnum = numneigh[i];
-
-        for (jj = 0; jj < jnum; jj++) {
-          j = jlist[jj];
-          j &= NEIGHMASK;
-          sum_jnum += 1;
-        }
-      }
-
-      memory->create(is_cohesive,inum+1,sum_jnum+1,"pair_gran_CFM:is_cohesive");
-      for (int i = 0; i <= inum; i++)
-        for (int j = 0; j <= sum_jnum; j++)
+      memory->create(is_cohesive,inum,inum,"pair_gran_CFM:is_cohesive");
+      for (int i = 0; i < inum; i++)
+        for (int j = 0; j < inum; j++)
           is_cohesive[i][j] = false;
   }
 
@@ -200,18 +186,18 @@ void PairCFM::compute(int eflag, int vflag)
 
       if (update->ntimestep < 1){
           if (rsq <= (radsum*radsum)){
-              is_cohesive[ID1][ID2] = true; // is cohesive = 1.0 ; is not cohesive = -1.0
-              is_cohesive[ID2][ID1] = true;
+              is_cohesive[ID1-1][ID2-1] = true; // is cohesive = 1.0 ; is not cohesive = -1.0
+              is_cohesive[ID2-1][ID1-1] = true;
           }
           else{
               touch[jj] = 0;
-              is_cohesive[ID1][ID2] = false;
-              is_cohesive[ID2][ID1] = false;
+              is_cohesive[ID1-1][ID2-1] = false;
+              is_cohesive[ID2-1][ID1-1] = false;
               _ignore = -1;
           }
       }
 
-      if (!is_cohesive[ID1][ID2] && rsq > radsum*radsum) {
+      if (!is_cohesive[ID1-1][ID2-1] && rsq > radsum*radsum) {
 
         // unset non-touching neighbors
 
@@ -223,7 +209,7 @@ void PairCFM::compute(int eflag, int vflag)
 
       }
 
-      if (is_cohesive[ID1][ID2])
+      if (is_cohesive[ID1-1][ID2-1])
       {
           _Dtensile = (M_PI * radmin * _t) / kn; // maximum distance between particles before the bond breaks (always positive)
       }
@@ -233,7 +219,7 @@ void PairCFM::compute(int eflag, int vflag)
 
       if (rsq > (radsum*radsum))   // if particles are not in touch
       {
-          if (!is_cohesive[ID1][ID2])   // if particles are not cohesive
+          if (!is_cohesive[ID1-1][ID2-1])   // if particles are not cohesive
           {
               touch[jj] = 0;
               _history[0] = 0.0;
@@ -241,15 +227,15 @@ void PairCFM::compute(int eflag, int vflag)
               _history[2] = 0.0;
               _ignore = -1;
           }
-          if ((fabs(radsum - sqrt(rsq)) >= _Dtensile) && (is_cohesive[ID1][ID2]))
+          if ((fabs(radsum - sqrt(rsq)) >= _Dtensile) && (is_cohesive[ID1-1][ID2-1]))
           {
               touch[jj] = 0;
               _history[0] = 0.0;
               _history[1] = 0.0;
               _history[2] = 0.0;
               _history[5] += 1.0;
-              is_cohesive[ID1][ID2] = false;
-              is_cohesive[ID2][ID1] = false;
+              is_cohesive[ID1-1][ID2-1] = false;
+              is_cohesive[ID2-1][ID1-1] = false;
               _ignore = -1;
           }
       }
@@ -341,7 +327,7 @@ void PairCFM::compute(int eflag, int vflag)
 
         // rescale frictional displacements and forces if needed
 
-        if (is_cohesive[ID1][ID2])
+        if (is_cohesive[ID1-1][ID2-1])
         {
             _maxShearForce = M_PI * radmin * _c;
             fn = xmu * fabs(ccel*r) + _maxShearForce;
@@ -365,10 +351,10 @@ void PairCFM::compute(int eflag, int vflag)
             fs3 *= fn/fs;
           } else fs1 = fs2 = fs3 = 0.0;
 
-          if (is_cohesive[ID1][ID2]){
+          if (is_cohesive[ID1-1][ID2-1]){
               _history[6] += + 1.0;
-              is_cohesive[ID1][ID2] = false;
-              is_cohesive[ID2][ID1] = false;
+              is_cohesive[ID1-1][ID2-1] = false;
+              is_cohesive[ID2-1][ID1-1] = false;
               if (rsq > (radsum*radsum)){
                   touch[jj] = 0;
                   _history[0] = 0.0;
