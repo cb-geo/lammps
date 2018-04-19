@@ -139,8 +139,29 @@ void PairCFM::compute(int eflag, int vflag)
   firsttouch = fix_history->firstflag;
   firstshear = fix_history->firstvalue;
 
+  int sum_jnum = 0;
+
+  if (update->ntimestep == 0)
+  {
+      for (ii = 0; ii < inum; ii++) {
+        i = ilist[ii];
+        jlist = firstneigh[i];
+        jnum = numneigh[i];
+
+        for (jj = 0; jj < jnum; jj++) {
+          j = jlist[jj];
+          j &= NEIGHMASK;
+          sum_jnum += 1;
+        }
+      }
+
+      memory->create(is_cohesive,inum+1,sum_jnum+1,"pair_gran_CFM:is_cohesive");
+      for (int i = 0; i <= inum; i++)
+        for (int j = 0; j <= sum_jnum; j++)
+          is_cohesive[i][j] = false;
+  }
+
   // loop over neighbors of my atoms
-  int number_pairs = 0;
 
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
@@ -234,7 +255,6 @@ void PairCFM::compute(int eflag, int vflag)
       }
 
       if (_ignore != -1){
-        number_pairs = number_pairs + 1;
         r = sqrt(rsq);
         rinv = 1.0/r;
         rsqinv = 1.0/rsq;
@@ -393,8 +413,6 @@ void PairCFM::compute(int eflag, int vflag)
     }
   }
 
-  n_pairs = number_pairs;
-
   if (vflag_fdotr) virial_fdotr_compute();
 }
 
@@ -411,14 +429,6 @@ void PairCFM::allocate()
   for (int i = 1; i <= n; i++)
     for (int j = i; j <= n; j++)
       setflag[i][j] = 0;
-
-  int m = n_pairs;
-
-  // the size of the vectors are adopted only for testing
-  memory->create(is_cohesive,m,m,"pair_gran_CFM:is_cohesive");
-  for (int i = 0; i <= m-1; i++)
-    for (int j = 0; j <= m-1; j++)
-      is_cohesive[i][j] = false;
 
   memory->create(cutsq,n+1,n+1,"pair:cutsq");
 
