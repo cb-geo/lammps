@@ -49,9 +49,9 @@ class PairCFM : public Pair {
   double dt;
   int freeze_group_bit;
   int history;
-  double _Dtensile,_maxShearForce;
+  double _D,_maxShearForce;
   bool **is_cohesive; // if pair of particles are in contact or not
-  double **_Dinitial;
+  double **_Dinitial,**_Dtensile;
 
   int neighprev;
   double *onerad_dynamic,*onerad_frozen;

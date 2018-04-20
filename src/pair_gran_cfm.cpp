@@ -52,6 +52,8 @@ PairCFM::PairCFM(LAMMPS *lmp) : Pair(lmp)
 
   neighprev = 0;
 
+  _D = 0.;
+
   nmax = 0;
   mass_rigid = NULL;
 
@@ -146,10 +148,15 @@ void PairCFM::compute(int eflag, int vflag)
         for (int j = 0; j < inum; j++)
           is_cohesive[i][j] = false;
 
-      memory->create(_D,inum,inum,"pair_gran_CFM:_D");
+      memory->create(_Dinitial,inum,inum,"pair_gran_CFM:_D");
       for (int i = 0; i < inum; i++)
         for (int j = 0; j < inum; j++)
-          _D[i][j] = 0.0;
+          _Dinitial[i][j] = 0.0;
+
+      memory->create(_Dtensile,inum,inum,"pair_gran_CFM:_D");
+      for (int i = 0; i < inum; i++)
+        for (int j = 0; j < inum; j++)
+          _Dtensile[i][j] = 0.0;
   }
 
   // loop over neighbors of my atoms
@@ -169,7 +176,6 @@ void PairCFM::compute(int eflag, int vflag)
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
       j &= NEIGHMASK;
-
       ID2 = atom->tag[j];
 
       delx = xtmp - x[j][0];
@@ -177,7 +183,8 @@ void PairCFM::compute(int eflag, int vflag)
       delz = ztmp - x[j][2];
       rsq = delx*delx + dely*dely + delz*delz;
       radj = radius[j];
-      radsum = (radi*_enlargeFactor) + (radj*_enlargeFactor);
+      radsum = radi + radj;
+      r = sqrt(rsq);
 
       _history = &allshear[3*jj];   // history[0] = shear1 / history[1] = shear2 / history[2] = shear3 / history[4] = initialD /
                                     // history[5] = tensileBreakage / history[6] = shearBreakage
@@ -190,20 +197,27 @@ void PairCFM::compute(int eflag, int vflag)
       int _ignore = 1; // if ignore = -1, then, do not evaluate forces
 
       if (update->ntimestep < 1){
-          if (rsq <= ((radi*_enlargeFactor) + (radj*_enlargeFactor))*((radi*_enlargeFactor) + (radj*_enlargeFactor))){
+          if (r <= (radsum + ((_enlargeFactor-1)*(radmin)))){
               is_cohesive[ID1-1][ID2-1] = true; // is cohesive = 1.0 ; is not cohesive = -1.0
               is_cohesive[ID2-1][ID1-1] = true;
-              _Dinitial[ID1-1][ID2-1] = sqrt(rsq) - radsum;
+              _Dinitial[ID1-1][ID2-1] = radsum - r;
+              _Dinitial[ID2-1][ID1-1] = radsum - r;
+              _Dtensile[ID2-1][ID1-1] = (M_PI * radmin * _t) / kn; // maximum distance between particles before the bond breaks (always positive)
+              _Dtensile[ID1-1][ID2-1] = (M_PI * radmin * _t) / kn;
           }
           else{
               touch[jj] = 0;
               is_cohesive[ID1-1][ID2-1] = false;
               is_cohesive[ID2-1][ID1-1] = false;
               _ignore = -1;
+              _Dinitial[ID1-1][ID2-1] = 0.;
+              _Dinitial[ID2-1][ID1-1] = 0.;
+              _Dtensile[ID2-1][ID1-1] = 0.;
+              _Dtensile[ID1-1][ID2-1] = 0.;
           }
       }
 
-      if (!is_cohesive[ID1-1][ID2-1] && rsq > (radsum*radsum)) {
+      if (!is_cohesive[ID1-1][ID2-1] && r > radsum) {
 
         // unset non-touching neighbors
 
@@ -215,16 +229,9 @@ void PairCFM::compute(int eflag, int vflag)
 
       }
 
-      if (is_cohesive[ID1-1][ID2-1])
-      {
-          _D =
-          _Dtensile = (M_PI * radmin * _t) / kn; // maximum distance between particles before the bond breaks (always positive)
-      }
-      else {
-          _Dtensile = 0.0;
-      }
+      _D = (radsum - r) - _Dinitial[ID1-1][ID2-1];
 
-      if (rsq > (radsum*radsum))   // if particles are not in touch
+      if (_D < 0.)   // if particles are not in touch
       {
           if (!is_cohesive[ID1-1][ID2-1])   // if particles are not cohesive
           {
@@ -234,7 +241,7 @@ void PairCFM::compute(int eflag, int vflag)
               _history[2] = 0.0;
               _ignore = -1;
           }
-          if ((fabs(radsum - sqrt(rsq)) >= _Dtensile) && (is_cohesive[ID1-1][ID2-1]))
+          if ((fabs(_D) >= _Dtensile[ID1-1][ID2-1]) && (is_cohesive[ID1-1][ID2-1]))
           {
               touch[jj] = 0;
               _history[0] = 0.0;
@@ -248,7 +255,6 @@ void PairCFM::compute(int eflag, int vflag)
       }
 
       if (_ignore != -1){
-        r = sqrt(rsq);
         rinv = 1.0/r;
         rsqinv = 1.0/rsq;
 
@@ -295,8 +301,7 @@ void PairCFM::compute(int eflag, int vflag)
         // normal forces = Hookian contact + normal velocity damping
 
         damp = meff*gamman*vnnr*rsqinv;
-        ccel = kn*(radsum-r)*rinv - damp;
-        //ccel = kn*(_D)*rinv - damp;
+        ccel = kn*(_D)*rinv - damp;
 
         // relative velocities
 
