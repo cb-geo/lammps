@@ -145,6 +145,11 @@ void PairCFM::compute(int eflag, int vflag)
       for (int i = 0; i < inum; i++)
         for (int j = 0; j < inum; j++)
           is_cohesive[i][j] = false;
+
+      memory->create(_D,inum,inum,"pair_gran_CFM:_D");
+      for (int i = 0; i < inum; i++)
+        for (int j = 0; j < inum; j++)
+          _D[i][j] = 0.0;
   }
 
   // loop over neighbors of my atoms
@@ -172,7 +177,7 @@ void PairCFM::compute(int eflag, int vflag)
       delz = ztmp - x[j][2];
       rsq = delx*delx + dely*dely + delz*delz;
       radj = radius[j];
-      radsum = radi + radj;
+      radsum = (radi*_enlargeFactor) + (radj*_enlargeFactor);
 
       _history = &allshear[3*jj];   // history[0] = shear1 / history[1] = shear2 / history[2] = shear3 / history[4] = initialD /
                                     // history[5] = tensileBreakage / history[6] = shearBreakage
@@ -185,9 +190,10 @@ void PairCFM::compute(int eflag, int vflag)
       int _ignore = 1; // if ignore = -1, then, do not evaluate forces
 
       if (update->ntimestep < 1){
-          if (rsq <= (radsum*radsum)){
+          if (rsq <= ((radi*_enlargeFactor) + (radj*_enlargeFactor))*((radi*_enlargeFactor) + (radj*_enlargeFactor))){
               is_cohesive[ID1-1][ID2-1] = true; // is cohesive = 1.0 ; is not cohesive = -1.0
               is_cohesive[ID2-1][ID1-1] = true;
+              _Dinitial[ID1-1][ID2-1] = sqrt(rsq) - radsum;
           }
           else{
               touch[jj] = 0;
@@ -197,7 +203,7 @@ void PairCFM::compute(int eflag, int vflag)
           }
       }
 
-      if (!is_cohesive[ID1-1][ID2-1] && rsq > radsum*radsum) {
+      if (!is_cohesive[ID1-1][ID2-1] && rsq > (radsum*radsum)) {
 
         // unset non-touching neighbors
 
@@ -211,6 +217,7 @@ void PairCFM::compute(int eflag, int vflag)
 
       if (is_cohesive[ID1-1][ID2-1])
       {
+          _D =
           _Dtensile = (M_PI * radmin * _t) / kn; // maximum distance between particles before the bond breaks (always positive)
       }
       else {
