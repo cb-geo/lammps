@@ -159,6 +159,21 @@ void PairCFM::compute(int eflag, int vflag)
       for (int i = 0; i < inum; i++)
         for (int j = 0; j < inum; j++)
           _Dtensile[i][j] = 0.0;
+
+      memory->create(_shear1,inum,inum,"pair_gran_CFM:_D");
+      for (int i = 0; i < inum; i++)
+        for (int j = 0; j < inum; j++)
+          _shear1[i][j] = 0.0;
+
+      memory->create(_shear2,inum,inum,"pair_gran_CFM:_D");
+      for (int i = 0; i < inum; i++)
+        for (int j = 0; j < inum; j++)
+          _shear2[i][j] = 0.0;
+
+      memory->create(_shear3,inum,inum,"pair_gran_CFM:_D");
+      for (int i = 0; i < inum; i++)
+        for (int j = 0; j < inum; j++)
+          _shear3[i][j] = 0.0;
   }
 
   // loop over neighbors of my atoms
@@ -182,6 +197,7 @@ void PairCFM::compute(int eflag, int vflag)
       ID1 = fmin(atom->tag[j],atom->tag[i]);
       ID2 = fmax(atom->tag[j],atom->tag[i]);
 
+      // distances
       delx = xtmp - x[j][0];
       dely = ytmp - x[j][1];
       delz = ztmp - x[j][2];
@@ -218,9 +234,9 @@ void PairCFM::compute(int eflag, int vflag)
 
         // unset non-touching neighbors
         touch[jj] = 0;
-        _history[0] = 0.0;
-        _history[1] = 0.0;
-        _history[2] = 0.0;
+        _shear1[ID1-1][ID2-1] = 0.0;
+        _shear2[ID1-1][ID2-1] = 0.0;
+        _shear3[ID1-1][ID2-1] = 0.0;
         _ignore = -1;
       }
 
@@ -232,9 +248,9 @@ void PairCFM::compute(int eflag, int vflag)
           if (!is_cohesive[ID1-1][ID2-1])   // if particles are not cohesive
           {
               touch[jj] = 0;
-              _history[0] = 0.0;
-              _history[1] = 0.0;
-              _history[2] = 0.0;
+              _shear1[ID1-1][ID2-1] = 0.0;
+              _shear2[ID1-1][ID2-1] = 0.0;
+              _shear3[ID1-1][ID2-1] = 0.0;
               _ignore = -1;
           }
 
@@ -242,9 +258,9 @@ void PairCFM::compute(int eflag, int vflag)
           if ((fabs(_D) >= _Dtensile[ID1-1][ID2-1]) && (is_cohesive[ID1-1][ID2-1]))
           {
               touch[jj] = 0;
-              _history[0] = 0.0;
-              _history[1] = 0.0;
-              _history[2] = 0.0;
+              _shear1[ID1-1][ID2-1] = 0.0;
+              _shear2[ID1-1][ID2-1] = 0.0;
+              _shear3[ID1-1][ID2-1] = 0.0;
               is_cohesive[ID1-1][ID2-1] = false;
               _ignore = -1;
           }
@@ -311,27 +327,27 @@ void PairCFM::compute(int eflag, int vflag)
 
         touch[jj] = 1;
 
-        _history[0] += vtr1*dt;
-        _history[1] += vtr2*dt;
-        _history[2] += vtr3*dt;
+        _shear1[ID1-1][ID2-1] += vtr1*dt;
+        _shear2[ID1-1][ID2-1] += vtr2*dt;
+        _shear3[ID1-1][ID2-1] += vtr3*dt;
 
-        shrmag = sqrt(_history[0]*_history[0] + _history[1]*_history[1] +
-                      _history[2]*_history[2]);
+        shrmag = sqrt(_shear1[ID1-1][ID2-1]*_shear1[ID1-1][ID2-1] + _shear2[ID1-1][ID2-1]*_shear2[ID1-1][ID2-1] +
+                      _shear3[ID1-1][ID2-1]*_shear3[ID1-1][ID2-1]);
 
         // rotate shear displacements
 
-        rsht = _history[0]*delx + _history[1]*dely + _history[2]*delz;
+        rsht = _shear1[ID1-1][ID2-1]*delx + _shear2[ID1-1][ID2-1]*dely + _shear3[ID1-1][ID2-1]*delz;
         rsht *= rsqinv;
 
-        _history[0] -= rsht*delx;
-        _history[1] -= rsht*dely;
-        _history[2] -= rsht*delz;
+        _shear1[ID1-1][ID2-1] -= rsht*delx;
+        _shear2[ID1-1][ID2-1] -= rsht*dely;
+        _shear3[ID1-1][ID2-1] -= rsht*delz;
 
         // tangential forces = shear + tangential velocity damping
 
-        fs1 = - (kt*_history[0] + meff*gammat*vtr1);
-        fs2 = - (kt*_history[1] + meff*gammat*vtr2);
-        fs3 = - (kt*_history[2] + meff*gammat*vtr3);
+        fs1 = - (kt*_shear1[ID1-1][ID2-1] + meff*gammat*vtr1);
+        fs2 = - (kt*_shear2[ID1-1][ID2-1] + meff*gammat*vtr2);
+        fs3 = - (kt*_shear3[ID1-1][ID2-1] + meff*gammat*vtr3);
 
         // rescale frictional displacements and forces if needed
 
@@ -352,11 +368,11 @@ void PairCFM::compute(int eflag, int vflag)
 
         if (fs >= fn) {
           if (shrmag != 0.0) {
-            _history[0] = (fn/fs) * (_history[0] + meff*gammat*vtr1/kt) -
+            _shear1[ID1-1][ID2-1] = (fn/fs) * (_shear1[ID1-1][ID2-1] + meff*gammat*vtr1/kt) -
               meff*gammat*vtr1/kt;
-            _history[1] = (fn/fs) * (_history[1] + meff*gammat*vtr2/kt) -
+            _shear2[ID1-1][ID2-1] = (fn/fs) * (_shear2[ID1-1][ID2-1] + meff*gammat*vtr2/kt) -
               meff*gammat*vtr2/kt;
-            _history[2] = (fn/fs) * (_history[2] + meff*gammat*vtr3/kt) -
+            _shear3[ID1-1][ID2-1] = (fn/fs) * (_shear3[ID1-1][ID2-1] + meff*gammat*vtr3/kt) -
               meff*gammat*vtr3/kt;
             fs1 *= fn/fs;
             fs2 *= fn/fs;
@@ -370,9 +386,9 @@ void PairCFM::compute(int eflag, int vflag)
               is_cohesive[ID1-1][ID2-1] = false;
               if (rsq > (radsum*radsum)){
                   touch[jj] = 0;
-                  _history[0] = 0.0;
-                  _history[1] = 0.0;
-                  _history[2] = 0.0;
+                  _shear1[ID1-1][ID2-1] = 0.0;
+                  _shear2[ID1-1][ID2-1] = 0.0;
+                  _shear3[ID1-1][ID2-1] = 0.0;
                   fs1 = 0.0;
                   fs2 = 0.0;
                   fs3 = 0.0;
@@ -408,7 +424,6 @@ void PairCFM::compute(int eflag, int vflag)
         if (evflag) ev_tally_xyz(i,j,nlocal,newton_pair,
                                  0.0,0.0,fx,fy,fz,delx,dely,delz);
       }
-      _history[4] == 1.0;
     }
   }
 

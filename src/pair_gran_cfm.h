@@ -52,6 +52,7 @@ class PairCFM : public Pair {
   double _D,_maxShearForce;
   bool **is_cohesive; // if pair of particles are in contact or not
   double **_Dinitial,**_Dtensile; // initial distance between particles / maximum distance allowed between particles
+  double **_shear1,**_shear2,**_shear3; // shear history for all the contacts
 
   int neighprev;
   double *onerad_dynamic,*onerad_frozen;
