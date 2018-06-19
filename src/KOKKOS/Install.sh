@@ -57,6 +57,8 @@ action atom_vec_angle_kokkos.cpp atom_vec_angle.cpp
 action atom_vec_angle_kokkos.h atom_vec_angle.h
 action atom_vec_atomic_kokkos.cpp
 action atom_vec_atomic_kokkos.h
+action atom_vec_sphere_kokkos.cpp
+action atom_vec_sphere_kokkos.h
 action atom_vec_bond_kokkos.cpp atom_vec_bond.cpp
 action atom_vec_bond_kokkos.h atom_vec_bond.h
 action atom_vec_charge_kokkos.cpp

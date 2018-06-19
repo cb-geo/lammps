@@ -12,17 +12,22 @@
 ------------------------------------------------------------------------- */
 
 #include <cstdlib>
-#include "atom_vec_atomic_kokkos.h"
+#include "atom_vec_sphere_kokkos.h"
 #include "atom_kokkos.h"
 #include "comm_kokkos.h"
 #include "domain.h"
 #include "modify.h"
 #include "fix.h"
+#include "fix_adapt.h"
 #include "atom_masks.h"
+#include "math_const.h"
 #include "memory_kokkos.h"
 #include "error.h"
 
 using namespace LAMMPS_NS;
+using namespace MathConst;
+
+#define DELTA 10000
 
 /* ---------------------------------------------------------------------- */
 
@@ -98,10 +103,10 @@ void AtomVecSphereKokkos::grow(int n)
   memoryKK->grow_kokkos(atomKK->k_v,atomKK->v,nmax,3,"atom:v");
   memoryKK->grow_kokkos(atomKK->k_f,atomKK->f,nmax,3,"atom:f");
 
-  memoryKK->grow_kokkos(atomKK->k_radius,nmax,"atom:radius");
-  memoryKK->grow_kokkos(atomKK->k_rmass,nmax,"atom:rmass");
-  memoryKK->grow_kokkos(atomKK->k_omega,nmax,3,"atom:omega");
-  memoryKK->grow_kokkos(atomKK->k_torque,nmax*commKK->nthreads,3,"atom:torque");
+  memoryKK->grow_kokkos(atomKK->k_radius,atomKK->radius,nmax,"atom:radius");
+  memoryKK->grow_kokkos(atomKK->k_rmass,atomKK->rmass,nmax,"atom:rmass");
+  memoryKK->grow_kokkos(atomKK->k_omega,atomKK->omega,nmax,3,"atom:omega");
+  memoryKK->grow_kokkos(atomKK->k_torque,atomKK->torque,nmax*commKK->nthreads,3,"atom:torque");
 
   grow_reset();
   sync(Host,ALL_MASK);
@@ -365,9 +370,9 @@ int AtomVecSphereKokkos::pack_border_vel(int n, int *list, double *buf,
       buf[m++] = h_v(j,0);
       buf[m++] = h_v(j,1);
       buf[m++] = h_v(j,2);
-      buf[m++] = h_omega[j][0];
-      buf[m++] = h_omega[j][1];
-      buf[m++] = h_omega[j][2];
+      buf[m++] = h_omega(j,0);
+      buf[m++] = h_omega(j,1);
+      buf[m++] = h_omega(j,2);
     }
   } else {
     if (domain->triclinic == 0) {
@@ -393,9 +398,9 @@ int AtomVecSphereKokkos::pack_border_vel(int n, int *list, double *buf,
         buf[m++] = h_v(j,0);
         buf[m++] = h_v(j,1);
         buf[m++] = h_v(j,2);
-        buf[m++] = h_omega[j][0];
-        buf[m++] = h_omega[j][1];
-        buf[m++] = h_omega[j][2];
+        buf[m++] = h_omega(j,0);
+        buf[m++] = h_omega(j,1);
+        buf[m++] = h_omega(j,2);
       }
     } else {
       dvx = pbc[0]*h_rate[0] + pbc[5]*h_rate[5] + pbc[4]*h_rate[4];
@@ -420,9 +425,9 @@ int AtomVecSphereKokkos::pack_border_vel(int n, int *list, double *buf,
           buf[m++] = h_v(j,1);
           buf[m++] = h_v(j,2);
         }
-        buf[m++] = h_omega[j][0];
-        buf[m++] = h_omega[j][1];
-        buf[m++] = h_omega[j][2];
+        buf[m++] = h_omega(j,0);
+        buf[m++] = h_omega(j,1);
+        buf[m++] = h_omega(j,2);
       }
     }
   }
@@ -486,10 +491,10 @@ void AtomVecSphereKokkos::unpack_border_kokkos(const int &n, const int &first,
   while (first+n >= nmax) grow(0);
   modified(space,X_MASK|TAG_MASK|TYPE_MASK|MASK_MASK);
   if(space==Host) {
-    struct AtomVecSphereKokkos_UnpackBorder<LMPHostType> f(buf.view<LMPHostType>(),h_x,h_tag,h_type,h_mask,first);
+    struct AtomVecSphereKokkos_UnpackBorder<LMPHostType> f(buf.view<LMPHostType>(),h_x,h_tag,h_type,h_mask,h_radius,h_rmass,first);
     Kokkos::parallel_for(n,f);
   } else {
-    struct AtomVecSphereKokkos_UnpackBorder<LMPDeviceType> f(buf.view<LMPDeviceType>(),d_x,d_tag,d_type,d_mask,first);
+    struct AtomVecSphereKokkos_UnpackBorder<LMPDeviceType> f(buf.view<LMPDeviceType>(),d_x,d_tag,d_type,d_mask,d_radius,d_rmass,first);
     Kokkos::parallel_for(n,f);
   }
 }
@@ -1049,12 +1054,12 @@ int AtomVecSphereKokkos::data_atom_hybrid(int nlocal, char **values)
 
 void AtomVecSphereKokkos::data_vel(int m, char **values)
 {
-  h_v[m][0] = atof(values[0]);
-  h_v[m][1] = atof(values[1]);
-  h_v[m][2] = atof(values[2]);
-  h_omega[m][0] = atof(values[3]);
-  h_omega[m][1] = atof(values[4]);
-  h_omega[m][2] = atof(values[5]);
+  h_v(m,0) = atof(values[0]);
+  h_v(m,1) = atof(values[1]);
+  h_v(m,2) = atof(values[2]);
+  h_omega(m,0) = atof(values[3]);
+  h_omega(m,1) = atof(values[4]);
+  h_omega(m,2) = atof(values[5]);
 }
 
 /* ----------------------------------------------------------------------
@@ -1063,9 +1068,9 @@ void AtomVecSphereKokkos::data_vel(int m, char **values)
 
 int AtomVecSphereKokkos::data_vel_hybrid(int m, char **values)
 {
-  h_omega[m][0] = atof(values[0]);
-  h_omega[m][1] = atof(values[1]);
-  h_omega[m][2] = atof(values[2]);
+  h_omega(m,0) = atof(values[0]);
+  h_omega(m,1) = atof(values[1]);
+  h_omega(m,2) = atof(values[2]);
   return 3;
 }
 

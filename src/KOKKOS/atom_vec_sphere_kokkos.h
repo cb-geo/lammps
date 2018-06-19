@@ -31,6 +31,7 @@ class AtomVecSphereKokkos : public AtomVecKokkos {
  public:
   AtomVecSphereKokkos(class LAMMPS *);
   virtual ~AtomVecSphereKokkos() {}
+  void init();
   void grow(int);
   void copy(int, int, int);
   int pack_border(int, int *, double *, int, int *);
@@ -48,13 +49,13 @@ class AtomVecSphereKokkos : public AtomVecKokkos {
   void data_vel(int, char **);
   int data_vel_hybrid(int, char **);
   void pack_data(double **);
-  int pack_data_hybrid(int, double **);
+  int pack_data_hybrid(int, double *);
   void pack_vel(double **);
-  int pack_vel_hybrid(int, double **);
+  int pack_vel_hybrid(int, double *);
   void write_data(FILE *, int, double **);
-  int write_data_hybrid(FILE *, double **);
+  int write_data_hybrid(FILE *, double *);
   void write_vel(FILE *, int, double **);
-  int write_vel_hybrid(FILE *, double **);
+  int write_vel_hybrid(FILE *, double *);
   bigint memory_usage();
 
   void grow_reset();
@@ -83,6 +84,9 @@ class AtomVecSphereKokkos : public AtomVecKokkos {
   int *type,*mask;
   double **x,**v,**f;
 
+  double *radius,*rmass;
+  double **omega,**torque;
+
   DAT::t_tagint_1d d_tag;
   HAT::t_tagint_1d h_tag;
   DAT::t_imageint_1d d_image;
@@ -107,6 +111,7 @@ class AtomVecSphereKokkos : public AtomVecKokkos {
   HAT::t_f_array h_torque;
 
   DAT::tdual_int_1d k_count;
+  int radvary;
 };
 
 }
